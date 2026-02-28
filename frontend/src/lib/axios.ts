@@ -16,6 +16,12 @@ api.interceptors.request.use((config) => {
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Attach active hub context for scoped admin requests
+    const hubId = localStorage.getItem("activeHubId");
+    if (hubId) {
+      config.headers["X-Hub-Id"] = hubId;
+    }
   }
   return config;
 });

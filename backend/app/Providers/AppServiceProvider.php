@@ -2,6 +2,11 @@
 
 namespace App\Providers;
 
+use App\Models\Hub;
+use App\Models\Zone;
+use App\Policies\HubPolicy;
+use App\Policies\ZonePolicy;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +24,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Gate::policy(Hub::class, HubPolicy::class);
+        Gate::policy(Zone::class, ZonePolicy::class);
     }
 }

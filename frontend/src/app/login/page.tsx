@@ -6,6 +6,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
+import axios from "axios";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -27,11 +30,19 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // For now, simulate auth — replace with real API call
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      const res = await axios.post(`${API_URL}/auth/login`, { email, password });
+      const { access_token, user } = res.data;
+      localStorage.setItem("token", access_token);
+      localStorage.setItem("user", JSON.stringify(user));
       router.push("/dashboard");
-    } catch {
-      setError("Invalid credentials. Please try again.");
+    } catch (err: unknown) {
+      const message =
+        axios.isAxiosError(err) && err.response?.data?.message
+          ? err.response.data.message
+          : axios.isAxiosError(err) && err.response?.data?.errors?.email
+            ? err.response.data.errors.email[0]
+            : "Invalid credentials. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
     }

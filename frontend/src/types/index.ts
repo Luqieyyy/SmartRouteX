@@ -28,16 +28,37 @@ export interface Parcel {
   rider?: Rider | null;
 }
 
+export type RiderStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED";
+
 export interface Rider {
   id: number;
   name: string;
+  work_email: string | null;
   phone: string | null;
   zone: string | null;
+  hub_id: number | null;
+  zone_id: number | null;
+  employment_type: string | null;
+  warehouse: string | null;
+  vehicle_type: string | null;
+  vehicle_plate: string | null;
+  max_parcel_capacity: number | null;
+  shift_start: string | null;
+  shift_end: string | null;
+  status: RiderStatus;
   is_active: boolean;
+  must_change_password: boolean;
+  email_verified_at: string | null;
+  last_login_at: string | null;
+  failed_login_attempts: number;
+  locked_until: string | null;
+  created_by_admin_id: number | null;
   created_at: string;
   updated_at: string;
   parcels_count?: number;
   latest_location?: RiderLocation | null;
+  hub?: Hub | null;
+  assigned_zone?: Zone | null;
 }
 
 export interface RiderLocation {
@@ -104,4 +125,45 @@ export interface DailyTrend {
   date: string;
   delivered: number;
   failed: number;
+}
+
+/* ── Hub / Zone ────────────────────────────────────────────── */
+
+export type AdminRole = "SUPER_ADMIN" | "HUB_ADMIN" | "admin";
+
+export interface Hub {
+  id: number;
+  name: string;
+  code: string;
+  state: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  zones_count?: number;
+  riders_count?: number;
+  parcels_count?: number;
+}
+
+export interface Zone {
+  id: number;
+  hub_id: number;
+  name: string;
+  code: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  riders_count?: number;
+  parcels_count?: number;
+  hub?: Pick<Hub, "id" | "name" | "code"> | null;
+}
+
+export interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  role: AdminRole;
+  hub_id: number | null;
+  hub?: Pick<Hub, "id" | "name" | "code"> | null;
 }

@@ -2,13 +2,18 @@
 
 namespace App\Models;
 
+use App\Models\Traits\BelongsToHub;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Parcel extends Model
 {
+    use BelongsToHub;
+
     protected $fillable = [
+        'hub_id',
+        'zone_id',
         'barcode',
         'tracking_no',
         'recipient_name',
@@ -35,6 +40,16 @@ class Parcel extends Model
     public function rider(): BelongsTo
     {
         return $this->belongsTo(Rider::class, 'assigned_rider_id');
+    }
+
+    public function hub(): BelongsTo
+    {
+        return $this->belongsTo(Hub::class);
+    }
+
+    public function assignedZone(): BelongsTo
+    {
+        return $this->belongsTo(Zone::class, 'zone_id');
     }
 
     public function deliveryAttempts(): HasMany

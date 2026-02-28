@@ -1,11 +1,26 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut, User } from "lucide-react";
 
 export default function Topbar() {
+  const router = useRouter();
   const [now, setNow] = useState<string>("");
   const [open, setOpen] = useState(false);
+  const [adminName, setAdminName] = useState("Admin");
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("user");
+      if (stored) {
+        const user = JSON.parse(stored);
+        if (user?.name) setAdminName(user.name);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     const tick = () =>
@@ -24,6 +39,12 @@ export default function Topbar() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
+
+  function handleSignOut() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    router.push("/login");
+  }
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-6">
@@ -48,7 +69,7 @@ export default function Topbar() {
             <div className="flex h-7 w-7 items-center justify-center bg-gray-100 text-gray-500">
               <User size={14} />
             </div>
-            <span className="font-medium">Admin</span>
+            <span className="font-medium">{adminName}</span>
             <ChevronDown size={14} />
           </button>
 
@@ -58,7 +79,10 @@ export default function Topbar() {
                 <User size={14} />
                 Profile
               </button>
-              <button className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+              <button
+                onClick={handleSignOut}
+                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+              >
                 <LogOut size={14} />
                 Sign Out
               </button>

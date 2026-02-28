@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Hub;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,12 +38,7 @@ class AuthController extends Controller
         $payload = [
             'access_token' => $token,
             'token_type'   => 'Bearer',
-            'user'         => [
-                'id'    => $user->id,
-                'name'  => $user->name,
-                'email' => $user->email,
-                'role'  => $user->role,
-            ],
+            'user'         => $this->formatUser($user),
         ];
 
         // Include rider profile if user is a rider
@@ -69,6 +65,47 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();
+        $data = $this->formatUser($user);
+
+        if ($user->isRider() && $user->rider) {
+            $data['rider'] = $user->rider->load('latestLocation');
+        }
+
+        return response()->json($data);
+    }
+
+    /**
+     * POST /api/admin/switch-hub
+     * Super Admin only — set the active hub context.
+     */
+    public function switchHub(Request $request): JsonResponse
+    {
+        $request->validate([
+            'hub_id' => ['required', 'integer', 'exists:hubs,id'],
+        ]);
+
+        $user = $request->user();
+
+        if (! $user->isSuperAdmin()) {
+            return response()->json([
+                'message' => 'Only Super Admins can switch hub context.',
+            ], 403);
+        }
+
+        $hub = Hub::find($request->input('hub_id'));
+
+        return response()->json([
+            'ok'      => true,
+            'message' => "Switched to hub: {$hub->name} ({$hub->code})",
+            'hub'     => $hub,
+        ]);
+    }
+
+    /**
+     * Format user payload with hub + role info.
+     */
+    private function formatUser(User $user): array
+    {
         $data = [
             'id'    => $user->id,
             'name'  => $user->name,
@@ -76,10 +113,12 @@ class AuthController extends Controller
             'role'  => $user->role,
         ];
 
-        if ($user->isRider() && $user->rider) {
-            $data['rider'] = $user->rider->load('latestLocation');
+        if ($user->hub_id) {
+            $user->load('hub:id,name,code');
+            $data['hub_id'] = $user->hub_id;
+            $data['hub']    = $user->hub;
         }
 
-        return response()->json($data);
+        return $data;
     }
 }
