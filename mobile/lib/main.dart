@@ -25,7 +25,7 @@ Future<void> main() async {
   await Hive.initFlutter();
 
   // Initialize sync queue
-  await SyncQueue().init();
+  await SyncQueue.instance.init();
 
   runApp(const ProviderScope(child: SmartRouteXApp()));
 }

@@ -74,6 +74,18 @@ class _RouteScreenState extends ConsumerState<RouteScreen> {
           ),
           const SizedBox(height: 16),
 
+          // View Map button
+          SizedBox(
+            height: 44,
+            child: OutlinedButton.icon(
+              icon: const Icon(Icons.map, size: 18),
+              label: const Text('View Route Map'),
+              onPressed: () => context.push('/route-map'),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
           // Optimize button
           SizedBox(
             height: 44,

@@ -8,16 +8,22 @@ import 'api_client.dart';
 /// Offline-first sync queue. Stores actions in Hive
 /// and retries with exponential backoff when online.
 class SyncQueue {
+  static final SyncQueue instance = SyncQueue._();
+  SyncQueue._();
+
   static const _boxName = 'sync_queue';
   late Box<String> _box;
   Timer? _retryTimer;
   bool _processing = false;
+  bool _initialized = false;
 
-  int get pendingCount => _box.length;
-  bool get hasPending => _box.isNotEmpty;
+  int get pendingCount => _initialized ? _box.length : 0;
+  bool get hasPending => _initialized && _box.isNotEmpty;
 
   Future<void> init() async {
+    if (_initialized) return;
     _box = await Hive.openBox<String>(_boxName);
+    _initialized = true;
     _startWatching();
   }
 
@@ -30,6 +36,7 @@ class SyncQueue {
     Map<String, dynamic>? body,
     int retries = 0,
   }) async {
+    if (!_initialized) await init();
     final entry = jsonEncode({
       'action': action,
       'method': method,
@@ -43,7 +50,7 @@ class SyncQueue {
 
   /// Process all queued items.
   Future<void> processQueue() async {
-    if (_processing || _box.isEmpty) return;
+    if (!_initialized || _processing || _box.isEmpty) return;
     _processing = true;
 
     final keys = _box.keys.toList();

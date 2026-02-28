@@ -27,28 +27,28 @@ class KpiCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (icon != null) ...[
-            Icon(icon, size: 20, color: AppTheme.textSecondary),
-            const SizedBox(height: 8),
-          ],
+          if (icon != null)
+            Icon(icon, size: 16, color: AppTheme.textSecondary),
+          const SizedBox(height: 2),
           Text(
             value,
             style: TextStyle(
-              fontSize: 24,
+              fontSize: 20,
               fontWeight: FontWeight.w700,
               color: valueColor ?? AppTheme.textPrimary,
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             label,
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               color: AppTheme.textSecondary,
               fontWeight: FontWeight.w500,
             ),
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

@@ -34,7 +34,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
   }
 }
 
-final syncQueueProvider = Provider((ref) => SyncQueue());
+final syncQueueProvider = Provider((ref) => SyncQueue.instance);
 
 final syncProvider = StateNotifierProvider<SyncNotifier, SyncState>((ref) {
   return SyncNotifier(ref.read(syncQueueProvider));

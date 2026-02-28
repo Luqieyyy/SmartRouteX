@@ -9,6 +9,7 @@ import '../screens/parcels/parcel_detail_screen.dart';
 import '../screens/scanner/scanner_screen.dart';
 import '../screens/pod/pod_screen.dart';
 import '../screens/route/route_screen.dart';
+import '../screens/route/route_map_page.dart';
 import 'shell_scaffold.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -61,6 +62,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/route',
             builder: (_, __) => const RouteScreen(),
+          ),
+          GoRoute(
+            path: '/route-map',
+            builder: (_, __) => const RouteMapPage(),
           ),
         ],
       ),
