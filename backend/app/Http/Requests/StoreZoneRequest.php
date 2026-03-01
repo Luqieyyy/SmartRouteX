@@ -18,15 +18,19 @@ class StoreZoneRequest extends FormRequest
         $hubId = $this->resolveHubId();
 
         return [
-            'hub_id'    => ['sometimes', 'integer', 'exists:hubs,id'],
-            'name'      => ['required', 'string', 'max:255'],
-            'code'      => [
+            'hub_id'            => ['sometimes', 'integer', 'exists:hubs,id'],
+            'name'              => ['required', 'string', 'max:255'],
+            'code'              => [
                 'required', 'string', 'max:20',
                 Rule::unique('zones')->where(function ($query) use ($hubId) {
                     return $query->where('hub_id', $hubId);
                 }),
             ],
-            'is_active' => ['sometimes', 'boolean'],
+            'is_active'         => ['sometimes', 'boolean'],
+            'zone_boundary'     => ['nullable', 'array', 'min:3'],
+            'zone_boundary.*.lat' => ['required_with:zone_boundary', 'numeric', 'between:-90,90'],
+            'zone_boundary.*.lng' => ['required_with:zone_boundary', 'numeric', 'between:-180,180'],
+            'color_code'        => ['sometimes', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
         ];
     }
 

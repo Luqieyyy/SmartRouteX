@@ -6,11 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ImportParcelsRequest;
 use App\Http\Requests\StoreParcelRequest;
 use App\Models\Parcel;
+use App\Services\ZoneDetectionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class ParcelController extends Controller
 {
+    public function __construct(
+        private readonly ZoneDetectionService $zoneDetection,
+    ) {}
+
     public function index(Request $request)
     {
         $q = $request->query('q');
@@ -32,11 +37,25 @@ class ParcelController extends Controller
 
     public function store(StoreParcelRequest $request)
     {
-        $parcel = Parcel::create([
+        $data = [
             ...$request->validated(),
             'priority' => $request->input('priority', 'NORMAL'),
-            'status' => $request->input('status', 'CREATED'),
-        ]);
+            'status'   => $request->input('status', 'CREATED'),
+        ];
+
+        // Auto-detect zone from coordinates + hub context
+        if (! empty($data['recipient_lat']) && ! empty($data['recipient_lng']) && ! empty($data['hub_id'])) {
+            $detectedZoneId = $this->zoneDetection->detectZoneId(
+                (int) $data['hub_id'],
+                (float) $data['recipient_lat'],
+                (float) $data['recipient_lng'],
+            );
+            if ($detectedZoneId) {
+                $data['zone_id'] = $detectedZoneId;
+            }
+        }
+
+        $parcel = Parcel::create($data);
 
         return response()->json(['ok' => true, 'parcel' => $parcel], 201);
     }

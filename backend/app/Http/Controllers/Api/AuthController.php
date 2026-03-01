@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Hub;
 use App\Models\User;
+use App\Services\HubAccessService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -12,6 +13,10 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    public function __construct(
+        private readonly HubAccessService $hubAccessService,
+    ) {}
+
     /**
      * POST /api/auth/login
      */
@@ -39,6 +44,7 @@ class AuthController extends Controller
             'access_token' => $token,
             'token_type'   => 'Bearer',
             'user'         => $this->formatUser($user),
+            'hub_context'  => $this->hubAccessService->buildHubContext($user),
         ];
 
         // Include rider profile if user is a rider
@@ -66,6 +72,7 @@ class AuthController extends Controller
     {
         $user = $request->user();
         $data = $this->formatUser($user);
+        $data['hub_context'] = $this->hubAccessService->buildHubContext($user);
 
         if ($user->isRider() && $user->rider) {
             $data['rider'] = $user->rider->load('latestLocation');
@@ -76,29 +83,73 @@ class AuthController extends Controller
 
     /**
      * POST /api/admin/switch-hub
-     * Super Admin only — set the active hub context.
+     * SUPER_ADMIN and REGIONAL_MANAGER only.
      */
     public function switchHub(Request $request): JsonResponse
     {
         $request->validate([
-            'hub_id' => ['required', 'integer', 'exists:hubs,id'],
+            'hub_id' => ['nullable', 'integer'],
         ]);
 
         $user = $request->user();
 
-        if (! $user->isSuperAdmin()) {
+        if (! $user->canSwitchHub()) {
             return response()->json([
-                'message' => 'Only Super Admins can switch hub context.',
+                'message' => 'Your role does not allow hub switching.',
             ], 403);
         }
 
-        $hub = Hub::find($request->input('hub_id'));
+        $hubId = $request->input('hub_id');
+
+        // Allow clearing (global view) for SUPER_ADMIN only
+        if ($hubId === null) {
+            if (! $user->isSuperAdmin()) {
+                return response()->json([
+                    'message' => 'Only Super Admins can view all hubs globally.',
+                ], 403);
+            }
+
+            return response()->json([
+                'ok'            => true,
+                'message'       => 'Switched to global view (all hubs).',
+                'hub'           => null,
+                'active_hub_id' => null,
+            ]);
+        }
+
+        // Validate hub exists
+        $hub = Hub::where('id', $hubId)->where('is_active', true)->first();
+        if (! $hub) {
+            return response()->json([
+                'message' => 'Invalid or inactive hub.',
+            ], 422);
+        }
+
+        // REGIONAL_MANAGER: must have access
+        if ($user->isRegionalManager() && ! $user->canAccessHub($hub->id)) {
+            return response()->json([
+                'message' => 'You do not have access to this hub.',
+            ], 403);
+        }
 
         return response()->json([
-            'ok'      => true,
-            'message' => "Switched to hub: {$hub->name} ({$hub->code})",
-            'hub'     => $hub,
+            'ok'            => true,
+            'message'       => "Switched to hub: {$hub->name} ({$hub->code})",
+            'hub'           => $hub,
+            'active_hub_id' => $hub->id,
         ]);
+    }
+
+    /**
+     * GET /api/admin/hub-context
+     * Returns the hub context for the current user — used by the frontend
+     * hub selector to refresh available hubs without a full /me call.
+     */
+    public function hubContext(Request $request): JsonResponse
+    {
+        return response()->json(
+            $this->hubAccessService->buildHubContext($request->user())
+        );
     }
 
     /**

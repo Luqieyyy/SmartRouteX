@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import type { Zone, PaginatedResponse } from "@/types";
+import type { Zone, ZoneBoundary, PaginatedResponse } from "@/types";
 
 export interface ZoneFilters {
   q?: string;
@@ -13,12 +13,16 @@ export interface CreateZonePayload {
   name: string;
   code: string;
   is_active?: boolean;
+  zone_boundary?: { lat: number; lng: number }[] | null;
+  color_code?: string;
 }
 
 export interface UpdateZonePayload {
   name?: string;
   code?: string;
   is_active?: boolean;
+  zone_boundary?: { lat: number; lng: number }[] | null;
+  color_code?: string;
 }
 
 export async function getZones(
@@ -55,4 +59,17 @@ export async function deleteZone(
 ): Promise<{ ok: boolean; message: string }> {
   const { data } = await api.delete(`/admin/zones/${id}`);
   return data;
+}
+
+/**
+ * GET /api/admin/zones/boundaries
+ * Lightweight zone polygon data for map overlays.
+ */
+export async function getZoneBoundaries(
+  hubId?: number
+): Promise<ZoneBoundary[]> {
+  const params: Record<string, unknown> = {};
+  if (hubId) params.hub_id = hubId;
+  const { data } = await api.get("/admin/zones/boundaries", { params });
+  return data.data;
 }

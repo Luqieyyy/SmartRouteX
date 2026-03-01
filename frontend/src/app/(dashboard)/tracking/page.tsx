@@ -5,17 +5,22 @@ import {
   GoogleMap,
   InfoWindowF,
   MarkerF,
-  useLoadScript,
+  PolygonF,
 } from "@react-google-maps/api";
+import { useGoogleMaps } from "@/lib/google-maps-loader";
+import { polygonCentroid } from "@/components/maps/ZoneDrawingMap";
 import Button from "@/components/ui/Button";
 import {
   getLivePositions,
   getAssignedParcelPoints,
   type LiveRiderPosition,
 } from "@/services/tracking";
+import { getZoneBoundaries } from "@/services/zones";
+import type { ZoneBoundary } from "@/types";
 import { getGoogleMapsApiKey } from "@/lib/mapHelpers";
+import { useHubContext } from "@/lib/hub-context";
 
-const DEFAULT_CENTER = { lat: 3.139, lng: 101.6869 }; // KL
+const KL_CENTER = { lat: 3.139, lng: 101.6869 }; // fallback
 
 interface ParcelPoint {
   id: number;
@@ -44,12 +49,23 @@ function parcelIcon(): string {
 }
 
 export default function TrackingPage() {
+  const { refreshKey, activeHub, activeHubId } = useHubContext();
   const apiKey = getGoogleMapsApiKey();
+
+  // Map center: active hub coords → fallback to KL
+  const hubCenter = useMemo(() => {
+    if (activeHub?.latitude && activeHub?.longitude) {
+      return { lat: activeHub.latitude, lng: activeHub.longitude };
+    }
+    return KL_CENTER;
+  }, [activeHub]);
 
   const [riders, setRiders] = useState<LiveRiderPosition[]>([]);
   const [parcels, setParcels] = useState<ParcelPoint[]>([]);
+  const [zoneBoundaries, setZoneBoundaries] = useState<ZoneBoundary[]>([]);
   const [showRiders, setShowRiders] = useState(true);
   const [showParcels, setShowParcels] = useState(true);
+  const [showZones, setShowZones] = useState(true);
   const [loading, setLoading] = useState(true);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -66,7 +82,7 @@ export default function TrackingPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     fetchData();
@@ -75,6 +91,17 @@ export default function TrackingPage() {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [fetchData]);
+
+  /* ── Fetch zone boundaries (on hub switch) ── */
+  useEffect(() => {
+    if (!activeHubId) {
+      setZoneBoundaries([]);
+      return;
+    }
+    getZoneBoundaries(activeHubId)
+      .then(setZoneBoundaries)
+      .catch(() => setZoneBoundaries([]));
+  }, [activeHubId, refreshKey]);
 
   return (
     <div className="space-y-4">
@@ -102,6 +129,13 @@ export default function TrackingPage() {
             onClick={() => setShowParcels(!showParcels)}
           >
             Parcels {showParcels ? "ON" : "OFF"}
+          </Button>
+          <Button
+            variant={showZones ? "primary" : "secondary"}
+            size="sm"
+            onClick={() => setShowZones(!showZones)}
+          >
+            Zones {showZones ? "ON" : "OFF"}
           </Button>
         </div>
       </div>
@@ -132,6 +166,8 @@ export default function TrackingPage() {
             apiKey={apiKey}
             riders={showRiders ? riders : []}
             parcels={showParcels ? parcels : []}
+            zoneBoundaries={showZones ? zoneBoundaries : []}
+            hubCenter={hubCenter}
           />
         )}
       </div>
@@ -145,12 +181,16 @@ function TrackingMap({
   apiKey,
   riders,
   parcels,
+  zoneBoundaries,
+  hubCenter,
 }: {
   apiKey: string;
   riders: LiveRiderPosition[];
   parcels: ParcelPoint[];
+  zoneBoundaries: ZoneBoundary[];
+  hubCenter: { lat: number; lng: number };
 }) {
-  const { isLoaded, loadError } = useLoadScript({ googleMapsApiKey: apiKey });
+  const { isLoaded, loadError } = useGoogleMaps(apiKey);
 
   const [selectedRider, setSelectedRider] = useState<LiveRiderPosition | null>(null);
   const [selectedParcel, setSelectedParcel] = useState<ParcelPoint | null>(null);
@@ -164,12 +204,17 @@ function TrackingMap({
         ...riders.map((r) => ({ lat: r.lat, lng: r.lng })),
         ...parcels.map((p) => ({ lat: p.lat, lng: p.lng })),
       ];
-      if (allPoints.length === 0) return;
+      if (allPoints.length === 0) {
+        // No markers → center on hub
+        map.setCenter(hubCenter);
+        map.setZoom(13);
+        return;
+      }
       const bounds = new google.maps.LatLngBounds();
       allPoints.forEach((pt) => bounds.extend(pt));
       map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
     },
-    [riders, parcels],
+    [riders, parcels, hubCenter],
   );
 
   if (loadError) {
@@ -191,8 +236,8 @@ function TrackingMap({
   return (
     <GoogleMap
       mapContainerStyle={{ width: "100%", height: "100%" }}
-      center={DEFAULT_CENTER}
-      zoom={12}
+      center={hubCenter}
+      zoom={13}
       options={{
         disableDefaultUI: false,
         zoomControl: true,
@@ -206,6 +251,38 @@ function TrackingMap({
         setSelectedParcel(null);
       }}
     >
+      {/* Zone boundary polygons */}
+      {zoneBoundaries.map((z) => (
+        <React.Fragment key={`zone-${z.id}`}>
+          <PolygonF
+            paths={z.zone_boundary}
+            options={{
+              fillColor: z.color_code,
+              fillOpacity: 0.15,
+              strokeColor: z.color_code,
+              strokeWeight: 2,
+              strokeOpacity: 0.8,
+              zIndex: 0,
+            }}
+          />
+          {/* Zone name label at polygon centre */}
+          <MarkerF
+            position={polygonCentroid(z.zone_boundary)}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 0,
+            }}
+            label={{
+              text: z.name,
+              color: z.color_code,
+              fontSize: "16px",
+              fontWeight: "800",
+            }}
+            clickable={false}
+          />
+        </React.Fragment>
+      ))}
+
       {/* Rider markers */}
       {riders.map((r) => (
         <MarkerF

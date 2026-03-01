@@ -12,8 +12,8 @@ import {
   InfoWindowF,
   MarkerF,
   PolylineF,
-  useLoadScript,
 } from "@react-google-maps/api";
+import { useGoogleMaps } from "@/lib/google-maps-loader";
 
 import {
   buildRoutePath,
@@ -82,9 +82,7 @@ function MapInner({
   showRoute,
   className,
 }: MapViewProps & { apiKey: string }) {
-  const { isLoaded, loadError } = useLoadScript({
-    googleMapsApiKey: apiKey,
-  });
+  const { isLoaded, loadError } = useGoogleMaps(apiKey);
 
   const markers = useMemo(() => parcels ?? SAMPLE_PARCELS, [parcels]);
   const routePath = useMemo(() => buildRoutePath(markers), [markers]);

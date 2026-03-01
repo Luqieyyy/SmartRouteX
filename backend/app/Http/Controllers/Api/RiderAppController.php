@@ -110,6 +110,7 @@ class RiderAppController extends Controller
         $q      = $request->query('q');
 
         $parcels = Parcel::where('assigned_rider_id', $rider->id)
+            ->when($rider->zone_id, fn ($query, $zoneId) => $query->where('zone_id', $zoneId))
             ->when($status, fn ($query) => $query->where('status', $status))
             ->when($q, fn ($query) => $query->where(function ($sub) use ($q) {
                 $sub->where('barcode', 'ilike', "%{$q}%")

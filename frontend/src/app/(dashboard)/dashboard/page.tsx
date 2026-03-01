@@ -8,6 +8,7 @@ import {
   getDeliveryTrend,
 } from "@/services/dashboard";
 import type { DashboardStats, ZoneDelivery, DailyTrend } from "@/types";
+import { useHubContext } from "@/lib/hub-context";
 import {
   BarChart,
   Bar,
@@ -24,6 +25,7 @@ import { Loader2, AlertTriangle } from "lucide-react";
 type LoadState = "loading" | "ready" | "error";
 
 export default function DashboardPage() {
+  const { refreshKey } = useHubContext();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [zones, setZones] = useState<ZoneDelivery[]>([]);
   const [trend, setTrend] = useState<DailyTrend[]>([]);
@@ -54,7 +56,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   if (state === "loading") {
     return (

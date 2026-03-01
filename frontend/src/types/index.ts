@@ -129,7 +129,12 @@ export interface DailyTrend {
 
 /* ── Hub / Zone ────────────────────────────────────────────── */
 
-export type AdminRole = "SUPER_ADMIN" | "HUB_ADMIN" | "admin";
+export type AdminRole =
+  | "SUPER_ADMIN"
+  | "REGIONAL_MANAGER"
+  | "HUB_ADMIN"
+  | "STAFF"
+  | "admin";
 
 export interface Hub {
   id: number;
@@ -152,11 +157,31 @@ export interface Zone {
   name: string;
   code: string;
   is_active: boolean;
+  zone_boundary: { lat: number; lng: number }[] | null;
+  color_code: string;
   created_at?: string;
   updated_at?: string;
   riders_count?: number;
   parcels_count?: number;
   hub?: Pick<Hub, "id" | "name" | "code"> | null;
+}
+
+/** Lightweight boundary data for map overlays */
+export interface ZoneBoundary {
+  id: number;
+  name: string;
+  code: string;
+  color_code: string;
+  zone_boundary: { lat: number; lng: number }[];
+}
+
+/** Hub context returned by login / /me / /hub-context endpoints */
+export interface HubContext {
+  role: AdminRole;
+  can_switch: boolean;
+  show_global: boolean;
+  accessible_hubs: Pick<Hub, "id" | "name" | "code" | "state" | "latitude" | "longitude">[];
+  active_hub_id: number | null;
 }
 
 export interface AdminUser {
@@ -166,4 +191,5 @@ export interface AdminUser {
   role: AdminRole;
   hub_id: number | null;
   hub?: Pick<Hub, "id" | "name" | "code"> | null;
+  hub_context?: HubContext;
 }

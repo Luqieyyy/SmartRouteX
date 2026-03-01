@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
+import { HubProvider } from "@/lib/hub-context";
 
 export default function DashboardShell({
   children,
@@ -31,12 +32,14 @@ export default function DashboardShell({
   }
 
   return (
-    <div className="flex min-h-screen bg-[#F8F9FA]">
-      <Sidebar />
-      <div className="flex flex-1 flex-col pl-56">
-        <Topbar />
-        <main className="flex-1 p-6">{children}</main>
+    <HubProvider>
+      <div className="flex min-h-screen bg-[#F8F9FA]">
+        <Sidebar />
+        <div className="flex flex-1 flex-col pl-56">
+          <Topbar />
+          <main className="flex-1 p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </HubProvider>
   );
 }

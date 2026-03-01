@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, LogOut, User } from "lucide-react";
+import HubSelector from "@/components/layout/HubSelector";
 
 export default function Topbar() {
   const router = useRouter();
@@ -43,12 +44,13 @@ export default function Topbar() {
   function handleSignOut() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("activeHubId");
     router.push("/login");
   }
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-6">
-      {/* Left — page context or breadcrumb slot */}
+      {/* Left — page context */}
       <div>
         <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">
           Operations Dashboard
@@ -56,7 +58,10 @@ export default function Topbar() {
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-4">
+        {/* Hub Selector */}
+        <HubSelector />
+
         {/* Clock */}
         <span className="text-xs text-gray-500 tabular-nums">{now}</span>
 

@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import type { Hub, PaginatedResponse } from "@/types";
+import type { Hub, HubContext, PaginatedResponse } from "@/types";
 
 export interface HubFilters {
   q?: string;
@@ -59,13 +59,31 @@ export async function deleteHub(
   return data;
 }
 
+/**
+ * Switch the active hub context.
+ * Pass null to switch to global view (SUPER_ADMIN only).
+ */
 export async function switchHub(
-  hubId: number
-): Promise<{ ok: boolean; message: string; hub: Hub }> {
+  hubId: number | null
+): Promise<{ ok: boolean; message: string; hub: Hub | null; active_hub_id: number | null }> {
   const { data } = await api.post("/admin/switch-hub", { hub_id: hubId });
-  // Persist for subsequent requests
+
+  // Persist for subsequent X-Hub-Id header
   if (typeof window !== "undefined") {
-    localStorage.setItem("activeHubId", String(hubId));
+    if (data.active_hub_id) {
+      localStorage.setItem("activeHubId", String(data.active_hub_id));
+    } else {
+      localStorage.removeItem("activeHubId");
+    }
   }
+
+  return data;
+}
+
+/**
+ * Get the hub context for the current user (accessible hubs, permissions).
+ */
+export async function getHubContext(): Promise<HubContext> {
+  const { data } = await api.get("/admin/hub-context");
   return data;
 }

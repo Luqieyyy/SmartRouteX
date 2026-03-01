@@ -82,8 +82,11 @@ Route::prefix('admin')
     ->middleware(['auth:sanctum', EnsureAdmin::class, ResolveHubContext::class])
     ->group(function () {
 
-    // Hub switching (Super Admin only)
+    // Hub switching (Super Admin + Regional Manager)
     Route::post('/switch-hub', [AuthController::class, 'switchHub']);
+
+    // Hub context for selector (all admin roles)
+    Route::get('/hub-context', [AuthController::class, 'hubContext']);
 
     // Hubs (Super Admin only for CUD, active list for all admins)
     Route::prefix('hubs')->group(function () {
@@ -96,11 +99,12 @@ Route::prefix('admin')
 
     // Zones (scoped by hub context)
     Route::prefix('zones')->group(function () {
-        Route::get('/active',    [ZoneController::class, 'active']);
-        Route::get('/',          [ZoneController::class, 'index']);
-        Route::post('/',         [ZoneController::class, 'store']);
-        Route::put('/{zone}',    [ZoneController::class, 'update']);
-        Route::delete('/{zone}', [ZoneController::class, 'destroy']);
+        Route::get('/active',      [ZoneController::class, 'active']);
+        Route::get('/boundaries',  [ZoneController::class, 'boundaries']);
+        Route::get('/',            [ZoneController::class, 'index']);
+        Route::post('/',           [ZoneController::class, 'store']);
+        Route::put('/{zone}',      [ZoneController::class, 'update']);
+        Route::delete('/{zone}',   [ZoneController::class, 'destroy']);
     });
 
     // Dashboard

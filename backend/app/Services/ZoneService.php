@@ -54,11 +54,43 @@ class ZoneService
             throw new \LogicException('Hub context is required to create a zone.');
         }
 
+        // Server-side polygon overlap check
+        if (! empty($data['zone_boundary']) && count($data['zone_boundary']) >= 3) {
+            $overlap = Zone::findOverlapping($data['zone_boundary'], $data['hub_id']);
+            if ($overlap) {
+                throw new \Illuminate\Validation\ValidationException(
+                    validator: \Illuminate\Support\Facades\Validator::make([], []),
+                    response: response()->json([
+                        'message' => 'The given data was invalid.',
+                        'errors'  => [
+                            'zone_boundary' => ["Boundary overlaps with zone {$overlap->name} ({$overlap->code})."],
+                        ],
+                    ], 422),
+                );
+            }
+        }
+
         return Zone::create($data);
     }
 
     public function update(Zone $zone, array $data): Zone
     {
+        // Server-side polygon overlap check
+        if (! empty($data['zone_boundary']) && count($data['zone_boundary']) >= 3) {
+            $overlap = Zone::findOverlapping($data['zone_boundary'], $zone->hub_id, $zone->id);
+            if ($overlap) {
+                throw new \Illuminate\Validation\ValidationException(
+                    validator: \Illuminate\Support\Facades\Validator::make([], []),
+                    response: response()->json([
+                        'message' => 'The given data was invalid.',
+                        'errors'  => [
+                            'zone_boundary' => ["Boundary overlaps with zone {$overlap->name} ({$overlap->code})."],
+                        ],
+                    ], 422),
+                );
+            }
+        }
+
         $zone->update($data);
         return $zone->fresh();
     }

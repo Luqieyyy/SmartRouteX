@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import DataTable, { Column } from "@/components/ui/DataTable";
 import Pagination from "@/components/ui/Pagination";
 import FilterBar from "@/components/ui/FilterBar";
@@ -15,23 +16,33 @@ import {
   createHub,
   updateHub,
   deleteHub,
-  switchHub,
 } from "@/services/hubs";
 import {
   getZones,
   createZone,
   updateZone,
   deleteZone,
+  getZoneBoundaries,
 } from "@/services/zones";
-import type { Hub, Zone, AdminRole, PaginatedResponse } from "@/types";
+import type { Hub, Zone, AdminRole, PaginatedResponse, ZoneBoundary } from "@/types";
+import { useHubContext } from "@/lib/hub-context";
+import { getGoogleMapsApiKey } from "@/lib/mapHelpers";
+import { ZONE_COLORS, polygonsIntersect } from "@/components/maps/ZoneDrawingMap";
+import type { LatLng, NeighbourZone } from "@/components/maps/ZoneDrawingMap";
 import {
   Plus,
   Pencil,
   Trash2,
   Building2,
   MapPinned,
-  ArrowRightLeft,
+  Hexagon,
 } from "lucide-react";
+
+/* Lazy-load the map component (SSR-incompatible) */
+const ZoneDrawingMap = dynamic(
+  () => import("@/components/maps/ZoneDrawingMap"),
+  { ssr: false, loading: () => <div className="h-[400px] bg-gray-50 rounded-lg animate-pulse" /> }
+);
 
 /* ── Types ─────────────────────────────────────────────────── */
 
@@ -53,6 +64,8 @@ interface ZoneForm {
   name: string;
   code: string;
   is_active: string;
+  color_code: string;
+  zone_boundary: LatLng[] | null;
 }
 
 const emptyHubForm: HubForm = {
@@ -69,29 +82,15 @@ const emptyZoneForm: ZoneForm = {
   name: "",
   code: "",
   is_active: "1",
+  color_code: ZONE_COLORS[0],
+  zone_boundary: null,
 };
 
 /* ── Component ─────────────────────────────────────────────── */
 
 export default function SettingsPage() {
-  /* ── Auth / role ─────────────────────────────────────────── */
-  const [role, setRole] = useState<AdminRole>("admin");
-  const [activeHubId, setActiveHubId] = useState<number | null>(null);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("user");
-      if (stored) {
-        const user = JSON.parse(stored);
-        if (user?.role) setRole(user.role as AdminRole);
-        if (user?.hub_id) setActiveHubId(user.hub_id);
-      }
-      const hubId = localStorage.getItem("activeHubId");
-      if (hubId) setActiveHubId(Number(hubId));
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  /* ── Auth / role (from shared hub context) ───────────────── */
+  const { role, activeHubId, activeHub, refreshKey } = useHubContext();
 
   const isSuperAdmin = role === "SUPER_ADMIN";
 
@@ -134,7 +133,7 @@ export default function SettingsPage() {
     } finally {
       setHubLoading(false);
     }
-  }, [hubSearch, hubPage, isSuperAdmin]);
+  }, [hubSearch, hubPage, isSuperAdmin, refreshKey]);
 
   const fetchActiveHubs = useCallback(async () => {
     if (!isSuperAdmin) return;
@@ -246,18 +245,6 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleSwitchHub(hubId: number) {
-    try {
-      const res = await switchHub(hubId);
-      setActiveHubId(hubId);
-      setToast(res.message || "Switched to hub.");
-      // Refresh zone data if on zones tab
-      if (tab === "zones") fetchZones();
-    } catch {
-      setToast("Failed to switch hub.");
-    }
-  }
-
   function updateHubField(key: keyof HubForm, value: string) {
     setHubForm((p) => ({ ...p, [key]: value }));
     setHubErrors((p) => ({ ...p, [key]: undefined }));
@@ -344,6 +331,7 @@ export default function SettingsPage() {
   const [zoneForm, setZoneForm] = useState<ZoneForm>(emptyZoneForm);
   const [zoneErrors, setZoneErrors] = useState<Partial<Record<keyof ZoneForm, string>>>({});
   const [zoneSaving, setZoneSaving] = useState(false);
+  const [hubZoneBoundaries, setHubZoneBoundaries] = useState<ZoneBoundary[]>([]);
 
   const fetchZones = useCallback(async () => {
     setZoneLoading(true);
@@ -358,11 +346,20 @@ export default function SettingsPage() {
     } finally {
       setZoneLoading(false);
     }
-  }, [zoneSearch, zonePage]);
+  }, [zoneSearch, zonePage, refreshKey]);
 
   useEffect(() => {
     if (tab === "zones") fetchZones();
   }, [tab, fetchZones]);
+
+  /* Fetch all zone boundaries for the hub (for map overlay + overlap check) */
+  useEffect(() => {
+    if (tab !== "zones") return;
+    const hubId = activeHubId ?? undefined;
+    getZoneBoundaries(hubId)
+      .then(setHubZoneBoundaries)
+      .catch(() => setHubZoneBoundaries([]));
+  }, [tab, activeHubId, refreshKey]);
 
   useEffect(() => {
     setZonePage(1);
@@ -370,7 +367,16 @@ export default function SettingsPage() {
 
   /* Zone modal helpers */
   function openZoneCreate() {
-    setZoneForm({ ...emptyZoneForm, hub_id: activeHubId ? String(activeHubId) : "" });
+    // Pick a random color from the palette
+    const usedColors = (zoneData?.data ?? []).map((z) => z.color_code);
+    const available = ZONE_COLORS.filter((c) => !usedColors.includes(c));
+    const nextColor = available.length > 0 ? available[0] : ZONE_COLORS[Math.floor(Math.random() * ZONE_COLORS.length)];
+
+    setZoneForm({
+      ...emptyZoneForm,
+      hub_id: activeHubId ? String(activeHubId) : "",
+      color_code: nextColor,
+    });
     setZoneErrors({});
     setZoneModal("create");
   }
@@ -382,6 +388,8 @@ export default function SettingsPage() {
       name: zone.name,
       code: zone.code,
       is_active: zone.is_active ? "1" : "0",
+      color_code: zone.color_code || ZONE_COLORS[0],
+      zone_boundary: zone.zone_boundary ?? null,
     });
     setZoneErrors({});
     setZoneModal("edit");
@@ -397,6 +405,21 @@ export default function SettingsPage() {
     if (!zoneForm.name.trim()) errs.name = "Name is required.";
     if (!zoneForm.code.trim()) errs.code = "Code is required.";
     if (isSuperAdmin && !zoneForm.hub_id) errs.hub_id = "Hub is required.";
+
+    /* ── Frontend polygon overlap check ── */
+    if (zoneForm.zone_boundary && zoneForm.zone_boundary.length >= 3) {
+      const editingId = zoneSelected?.id;
+      const siblings = hubZoneBoundaries.filter(
+        (z) => z.id !== editingId && z.zone_boundary.length >= 3,
+      );
+      for (const other of siblings) {
+        if (polygonsIntersect(zoneForm.zone_boundary, other.zone_boundary)) {
+          errs.zone_boundary = `Boundary overlaps with zone "${other.name}". Adjust vertices to avoid overlap.` as string;
+          break;
+        }
+      }
+    }
+
     if (Object.keys(errs).length) {
       setZoneErrors(errs);
       return;
@@ -405,19 +428,23 @@ export default function SettingsPage() {
     setZoneSaving(true);
     try {
       if (zoneModal === "create") {
-        const payload: Record<string, unknown> = {
+        const payload = {
           name: zoneForm.name.trim(),
           code: zoneForm.code.trim().toUpperCase(),
           is_active: zoneForm.is_active === "1",
+          color_code: zoneForm.color_code,
+          zone_boundary: zoneForm.zone_boundary,
+          hub_id: isSuperAdmin && zoneForm.hub_id ? Number(zoneForm.hub_id) : undefined,
         };
-        if (isSuperAdmin && zoneForm.hub_id) payload.hub_id = Number(zoneForm.hub_id);
-        const res = await createZone(payload as Parameters<typeof createZone>[0]);
+        const res = await createZone(payload);
         setToast(res.message || "Zone created.");
       } else if (zoneSelected) {
         await updateZone(zoneSelected.id, {
           name: zoneForm.name.trim(),
           code: zoneForm.code.trim().toUpperCase(),
           is_active: zoneForm.is_active === "1",
+          color_code: zoneForm.color_code,
+          zone_boundary: zoneForm.zone_boundary,
         });
         setToast("Zone updated.");
       }
@@ -461,6 +488,18 @@ export default function SettingsPage() {
 
   const zoneColumns: Column<Zone>[] = [
     {
+      key: "color_code",
+      label: "",
+      className: "w-8",
+      render: (z) => (
+        <div
+          className="w-4 h-4 rounded-full border border-gray-200"
+          style={{ backgroundColor: z.color_code || "#3B82F6" }}
+          title={z.color_code}
+        />
+      ),
+    },
+    {
       key: "code",
       label: "Code",
       render: (z) => (
@@ -485,6 +524,25 @@ export default function SettingsPage() {
           } as Column<Zone>,
         ]
       : []),
+    {
+      key: "zone_boundary",
+      label: "Boundary",
+      render: (z) => {
+        const hasB = z.zone_boundary && z.zone_boundary.length >= 3;
+        return (
+          <Badge className={hasB ? "bg-blue-50 text-blue-700" : "bg-gray-100 text-gray-500"}>
+            {hasB ? (
+              <span className="flex items-center gap-1">
+                <Hexagon size={10} />
+                {z.zone_boundary!.length} pts
+              </span>
+            ) : (
+              "No boundary"
+            )}
+          </Badge>
+        );
+      },
+    },
     {
       key: "is_active",
       label: "Status",
@@ -551,32 +609,6 @@ export default function SettingsPage() {
             Manage hubs, zones, and system configuration
           </p>
         </div>
-
-        {/* Hub Switcher (Super Admin only) */}
-        {isSuperAdmin && allHubs.length > 0 && (
-          <div className="flex items-center gap-2">
-            <ArrowRightLeft size={14} className="text-gray-400" />
-            <select
-              value={activeHubId ?? ""}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val) handleSwitchHub(Number(val));
-                else {
-                  localStorage.removeItem("activeHubId");
-                  setActiveHubId(null);
-                }
-              }}
-              className="border border-gray-300 px-3 py-1.5 text-sm text-gray-700 bg-white focus:border-[#E10600] focus:outline-none focus:ring-1 focus:ring-[#E10600]"
-            >
-              <option value="">All Hubs (Global)</option>
-              {allHubs.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.code} — {h.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
       {/* Tabs */}
@@ -753,12 +785,13 @@ export default function SettingsPage() {
       </Modal>
 
       {/* ══════════════════════════════════════════════════════════
-         Zone Modal
+         Zone Modal (with Polygon Drawing)
          ══════════════════════════════════════════════════════════ */}
       <Modal
         open={zoneModal !== null}
         onClose={closeZoneModal}
         title={zoneModal === "create" ? "Create Zone" : "Edit Zone"}
+        wide
       >
         <div className="space-y-4">
           {/* Hub selection (Super Admin only, create only) */}
@@ -777,30 +810,103 @@ export default function SettingsPage() {
               ]}
             />
           )}
-          <Input
-            label="Zone Name"
-            value={zoneForm.name}
-            onChange={(e) => updateZoneField("name", e.target.value)}
-            error={zoneErrors.name}
-            placeholder="e.g. Downtown KL"
-          />
-          <Input
-            label="Code"
-            value={zoneForm.code}
-            onChange={(e) => updateZoneField("code", e.target.value.toUpperCase())}
-            error={zoneErrors.code}
-            placeholder="e.g. KL-DT"
-            maxLength={20}
-          />
-          <Select
-            label="Status"
-            value={zoneForm.is_active}
-            onChange={(e) => updateZoneField("is_active", e.target.value)}
-            options={[
-              { value: "1", label: "Active" },
-              { value: "0", label: "Inactive" },
-            ]}
-          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Zone Name"
+              value={zoneForm.name}
+              onChange={(e) => updateZoneField("name", e.target.value)}
+              error={zoneErrors.name}
+              placeholder="e.g. Downtown KL"
+            />
+            <Input
+              label="Code"
+              value={zoneForm.code}
+              onChange={(e) => updateZoneField("code", e.target.value.toUpperCase())}
+              error={zoneErrors.code}
+              placeholder="e.g. KL-DT"
+              maxLength={20}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Status"
+              value={zoneForm.is_active}
+              onChange={(e) => updateZoneField("is_active", e.target.value)}
+              options={[
+                { value: "1", label: "Active" },
+                { value: "0", label: "Inactive" },
+              ]}
+            />
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                Zone Color
+              </label>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {ZONE_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setZoneForm((p) => ({ ...p, color_code: c }))}
+                    className={`w-6 h-6 rounded-full border-2 transition-all ${
+                      zoneForm.color_code === c
+                        ? "border-gray-900 scale-110"
+                        : "border-transparent hover:border-gray-300"
+                    }`}
+                    style={{ backgroundColor: c }}
+                    title={c}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Zone Boundary Map ──────────────────────────────── */}
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1.5">
+              Zone Boundary (Polygon)
+            </label>
+            {(() => {
+              const mapsKey = getGoogleMapsApiKey();
+              if (!mapsKey) {
+                return (
+                  <div className="h-[200px] bg-gray-50 rounded-lg flex items-center justify-center text-sm text-gray-400">
+                    Google Maps API key not configured. Add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to .env.local
+                  </div>
+                );
+              }
+              return (
+                <ZoneDrawingMap
+                  apiKey={mapsKey}
+                  boundary={zoneForm.zone_boundary}
+                  onBoundaryChange={(b) =>
+                    setZoneForm((p) => ({ ...p, zone_boundary: b }))
+                  }
+                  hubCenter={
+                    activeHub?.latitude && activeHub?.longitude
+                      ? { lat: activeHub.latitude, lng: activeHub.longitude }
+                      : undefined
+                  }
+                  color={zoneForm.color_code}
+                  zoneName={zoneForm.name || undefined}
+                  otherZones={
+                    hubZoneBoundaries
+                      .filter((z) => z.id !== zoneSelected?.id && z.zone_boundary.length >= 3)
+                      .map((z) => ({
+                        id: z.id,
+                        name: z.name,
+                        color_code: z.color_code,
+                        zone_boundary: z.zone_boundary,
+                      }))
+                  }
+                />
+              );
+            })()}
+            {zoneErrors.zone_boundary && (
+              <p className="text-xs text-red-600 mt-1">{zoneErrors.zone_boundary}</p>
+            )}
+          </div>
         </div>
 
         <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">

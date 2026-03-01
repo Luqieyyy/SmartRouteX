@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreZoneRequest;
 use App\Http\Requests\UpdateZoneRequest;
+use App\Models\Scopes\HubScope;
 use App\Models\Zone;
+use App\Services\ZoneDetectionService;
 use App\Services\ZoneService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -14,6 +16,7 @@ class ZoneController extends Controller
 {
     public function __construct(
         private readonly ZoneService $zoneService,
+        private readonly ZoneDetectionService $zoneDetection,
     ) {}
 
     /**
@@ -47,6 +50,26 @@ class ZoneController extends Controller
     }
 
     /**
+     * GET /api/admin/zones/boundaries
+     * Returns all zone polygons for the current hub context.
+     * Lightweight payload for map rendering (Live Tracking & Settings).
+     */
+    public function boundaries(Request $request): JsonResponse
+    {
+        $hubId = $request->query('hub_id')
+            ? (int) $request->query('hub_id')
+            : HubScope::resolveHubId();
+
+        if (! $hubId) {
+            return response()->json(['data' => []]);
+        }
+
+        return response()->json([
+            'data' => $this->zoneDetection->getBoundariesForHub($hubId),
+        ]);
+    }
+
+    /**
      * POST /api/admin/zones
      */
     public function store(StoreZoneRequest $request): JsonResponse
@@ -58,6 +81,9 @@ class ZoneController extends Controller
                 data: $request->validated(),
                 hubId: $request->input('hub_id'),
             );
+
+            // Invalidate boundary cache for this hub
+            $this->zoneDetection->invalidateCache($zone->hub_id);
         } catch (\LogicException $e) {
             return response()->json([
                 'ok'      => false,
@@ -81,6 +107,9 @@ class ZoneController extends Controller
 
         $zone = $this->zoneService->update($zone, $request->validated());
 
+        // Invalidate boundary cache for this hub
+        $this->zoneDetection->invalidateCache($zone->hub_id);
+
         return response()->json([
             'ok'   => true,
             'zone' => $zone->load('hub:id,name,code'),
@@ -94,6 +123,8 @@ class ZoneController extends Controller
     {
         $this->authorize('delete', $zone);
 
+        $hubId = $zone->hub_id;
+
         try {
             $this->zoneService->delete($zone);
         } catch (\LogicException $e) {
@@ -102,6 +133,9 @@ class ZoneController extends Controller
                 'message' => $e->getMessage(),
             ], 422);
         }
+
+        // Invalidate boundary cache for this hub
+        $this->zoneDetection->invalidateCache($hubId);
 
         return response()->json(['ok' => true, 'message' => "Zone {$zone->code} deleted."]);
     }

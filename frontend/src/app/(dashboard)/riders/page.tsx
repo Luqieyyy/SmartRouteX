@@ -18,6 +18,7 @@ import {
 } from "@/services/riders";
 import { getActiveZones } from "@/services/zones";
 import type { Rider, RiderStatus, PaginatedResponse, Zone } from "@/types";
+import { useHubContext } from "@/lib/hub-context";
 import { Plus, Pencil, Trash2, Mail, RefreshCw } from "lucide-react";
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -75,6 +76,7 @@ const statusOptions: { value: RiderStatus; label: string }[] = [
 /* ── Component ─────────────────────────────────────────────── */
 
 export default function RidersPage() {
+  const { refreshKey } = useHubContext();
   const [data, setData] = useState<PaginatedResponse<Rider> | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -97,7 +99,7 @@ export default function RidersPage() {
     getActiveZones()
       .then(setZoneOptions)
       .catch(() => {});
-  }, []);
+  }, [refreshKey]);
 
   /* ── Data fetching ───────────────────────────────────────── */
 
@@ -116,7 +118,7 @@ export default function RidersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, zoneFilter, statusFilter]);
+  }, [page, search, zoneFilter, statusFilter, refreshKey]);
 
   useEffect(() => {
     fetchRiders();

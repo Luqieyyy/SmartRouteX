@@ -8,11 +8,11 @@ use App\Models\User;
 class HubPolicy
 {
     /**
-     * Only SUPER_ADMIN can view the full hub list.
+     * SUPER_ADMIN and REGIONAL_MANAGER can view the hub list.
      */
     public function viewAny(User $user): bool
     {
-        return $user->isSuperAdmin();
+        return $user->isSuperAdmin() || $user->isRegionalManager();
     }
 
     public function view(User $user, Hub $hub): bool
@@ -21,7 +21,7 @@ class HubPolicy
             return true;
         }
 
-        return $user->isHubAdmin() && $user->hub_id === $hub->id;
+        return $user->canAccessHub($hub->id);
     }
 
     public function create(User $user): bool

@@ -19,6 +19,7 @@ import {
   type ParcelFilters,
 } from "@/services/parcels";
 import type { Parcel, PaginatedResponse, ImportResult } from "@/types";
+import { useHubContext } from "@/lib/hub-context";
 import { Plus, Upload, Eye, Pencil, Trash2 } from "lucide-react";
 
 const STATUS_OPTIONS = [
@@ -70,6 +71,7 @@ const emptyForm: FormData = {
 };
 
 export default function ParcelsPage() {
+  const { refreshKey } = useHubContext();
   const [data, setData] = useState<PaginatedResponse<Parcel> | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -100,7 +102,7 @@ export default function ParcelsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, zoneFilter]);
+  }, [page, search, statusFilter, zoneFilter, refreshKey]);
 
   useEffect(() => {
     fetchParcels();

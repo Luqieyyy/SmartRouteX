@@ -31,9 +31,19 @@ export default function LoginPage() {
 
     try {
       const res = await axios.post(`${API_URL}/auth/login`, { email, password });
-      const { access_token, user } = res.data;
+      const { access_token, user, hub_context } = res.data;
       localStorage.setItem("token", access_token);
       localStorage.setItem("user", JSON.stringify(user));
+
+      // Store initial hub context from login response
+      if (hub_context) {
+        if (hub_context.active_hub_id) {
+          localStorage.setItem("activeHubId", String(hub_context.active_hub_id));
+        } else {
+          localStorage.removeItem("activeHubId");
+        }
+      }
+
       router.push("/dashboard");
     } catch (err: unknown) {
       const message =
