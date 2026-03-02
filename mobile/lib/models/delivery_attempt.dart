@@ -8,6 +8,7 @@ class DeliveryAttempt {
   final double? lat;
   final double? lng;
   final String? attemptedAt;
+  final String? riderName;
 
   const DeliveryAttempt({
     required this.id,
@@ -19,6 +20,7 @@ class DeliveryAttempt {
     this.lat,
     this.lng,
     this.attemptedAt,
+    this.riderName,
   });
 
   factory DeliveryAttempt.fromJson(Map<String, dynamic> json) =>
@@ -32,5 +34,13 @@ class DeliveryAttempt {
         lat: (json['lat'] as num?)?.toDouble(),
         lng: (json['lng'] as num?)?.toDouble(),
         attemptedAt: json['attempted_at'] as String?,
+        riderName: json['rider'] != null
+            ? (json['rider'] as Map<String, dynamic>)['name'] as String?
+            : null,
       );
+
+  bool get isDelivered => result == 'DELIVERED';
+  bool get isFailed => result == 'FAILED';
+  bool get hasLocation => lat != null && lng != null;
+  bool get hasPodImage => podImageUrl != null && podImageUrl!.isNotEmpty;
 }

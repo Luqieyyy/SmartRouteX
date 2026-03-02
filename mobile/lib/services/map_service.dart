@@ -9,75 +9,6 @@ import '../models/parcel.dart';
 /// Handles all Google Maps logic — markers, polylines, geocoding, camera.
 /// Keeps UI layer clean by encapsulating map operations.
 class MapService {
-  // ───────────────────── Dummy Parcels ─────────────────────
-  /// Hardcoded parcel list for development/testing.
-  static List<Parcel> getDummyParcels() => const [
-        Parcel(
-          id: 1,
-          barcode: 'SRX-001',
-          trackingNo: 'TRK-1001',
-          recipientName: 'Ahmad Bin Ismail',
-          recipientPhone: '0171234567',
-          rawAddress: 'Taman Universiti, Skudai',
-          recipientLat: 1.5364,
-          recipientLng: 103.6372,
-          zone: 'Skudai',
-          priority: 'EXPRESS',
-          status: 'ASSIGNED',
-        ),
-        Parcel(
-          id: 2,
-          barcode: 'SRX-002',
-          trackingNo: 'TRK-1002',
-          recipientName: 'Siti Aminah',
-          recipientPhone: '0129876543',
-          rawAddress: 'Taman Mutiara Rini, Skudai',
-          recipientLat: 1.5455,
-          recipientLng: 103.6518,
-          zone: 'Skudai',
-          priority: 'NORMAL',
-          status: 'ASSIGNED',
-        ),
-        Parcel(
-          id: 3,
-          barcode: 'SRX-003',
-          trackingNo: 'TRK-1003',
-          recipientName: 'Lee Wei Ming',
-          recipientPhone: '0167890123',
-          rawAddress: 'Taman Sutera Utama, Skudai',
-          recipientLat: 1.5281,
-          recipientLng: 103.6661,
-          zone: 'Skudai',
-          priority: 'NORMAL',
-          status: 'IN_TRANSIT',
-        ),
-        Parcel(
-          id: 4,
-          barcode: 'SRX-004',
-          trackingNo: 'TRK-1004',
-          recipientName: 'Raj Kumar',
-          recipientPhone: '0143456789',
-          rawAddress: 'Bukit Indah, Johor Bahru',
-          recipientLat: 1.5701,
-          recipientLng: 103.6561,
-          zone: 'Bukit Indah',
-          priority: 'EXPRESS',
-          status: 'ASSIGNED',
-        ),
-        Parcel(
-          id: 5,
-          barcode: 'SRX-005',
-          trackingNo: 'TRK-1005',
-          recipientName: 'Nurul Huda',
-          recipientPhone: '0187654321',
-          rawAddress: 'Taman Nusa Bestari, Johor Bahru',
-          recipientLat: 1.5553,
-          recipientLng: 103.6745,
-          zone: 'Nusa Bestari',
-          priority: 'NORMAL',
-          status: 'ASSIGNED',
-        ),
-      ];
 
   // ───────────────────── Current Location ─────────────────────
 
@@ -215,9 +146,10 @@ class MapService {
   }
 
   /// Returns the centroid (center point) of a parcel list.
-  static LatLng parcelCentroid(List<Parcel> parcels) {
+  /// Falls back to provided [fallback] if no parcels have GPS.
+  static LatLng parcelCentroid(List<Parcel> parcels, {LatLng? fallback}) {
     final gps = parcels.where((p) => p.hasGps).toList();
-    if (gps.isEmpty) return const LatLng(1.5500, 103.6500);
+    if (gps.isEmpty) return fallback ?? const LatLng(2.2090, 102.2511); // Jasin default
     final avgLat = gps.map((p) => p.recipientLat!).reduce((a, b) => a + b) / gps.length;
     final avgLng = gps.map((p) => p.recipientLng!).reduce((a, b) => a + b) / gps.length;
     return LatLng(avgLat, avgLng);

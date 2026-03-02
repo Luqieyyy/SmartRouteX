@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../config/theme.dart';
 import '../../providers/parcel_provider.dart';
+import '../../providers/location_provider.dart';
 import '../../widgets/parcel_tile.dart';
 
 class ParcelsScreen extends ConsumerStatefulWidget {
@@ -39,6 +40,44 @@ class _ParcelsScreenState extends ConsumerState<ParcelsScreen>
     _tabCtrl.dispose();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleUpdateLocation() async {
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      final loc = await ref.read(locationProvider.notifier).fetchCurrent();
+      if (loc == null) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Unable to get GPS location'),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+        return;
+      }
+
+      await ref.read(parcelsProvider.notifier).updateLocation(
+            lat: loc.latitude,
+            lng: loc.longitude,
+            accuracy: loc.accuracy,
+          );
+
+      messenger.showSnackBar(
+        SnackBar(
+          content:
+              Text('Location updated (${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)})'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to update location: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
   }
 
   @override
@@ -132,12 +171,18 @@ class _ParcelsScreenState extends ConsumerState<ParcelsScreen>
                   child: ListView.separated(
                     padding: const EdgeInsets.all(16),
                     itemCount: state.parcels.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
                     itemBuilder: (_, i) {
                       final parcel = state.parcels[i];
                       return ParcelTile(
                         parcel: parcel,
                         onTap: () => context.push('/parcels/${parcel.id}'),
+                        onPod: parcel.isInTransit
+                            ? () => context.push('/pod/${parcel.id}')
+                            : null,
+                        onUpdateLocation: (parcel.isInTransit || parcel.isAssigned)
+                            ? _handleUpdateLocation
+                            : null,
                       );
                     },
                   ),

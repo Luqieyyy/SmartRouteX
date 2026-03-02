@@ -13,12 +13,16 @@ export type ParcelStatus =
 
 export interface Parcel {
   id: number;
+  hub_id: number | null;
+  zone_id: number | null;
   barcode: string;
   tracking_no: string | null;
   recipient_name: string | null;
   recipient_phone: string | null;
   raw_address: string | null;
   zone: string | null;
+  recipient_lat: number | null;
+  recipient_lng: number | null;
   priority: ParcelPriority;
   status: ParcelStatus;
   assigned_rider_id: number | null;
@@ -26,6 +30,7 @@ export interface Parcel {
   created_at: string;
   updated_at: string;
   rider?: Rider | null;
+  delivery_attempts?: DeliveryAttempt[] | null;
 }
 
 export type RiderStatus = "PENDING" | "ACTIVE" | "SUSPENDED" | "DEACTIVATED";
@@ -47,6 +52,7 @@ export interface Rider {
   shift_end: string | null;
   status: RiderStatus;
   is_active: boolean;
+  shift_active: boolean;
   must_change_password: boolean;
   email_verified_at: string | null;
   last_login_at: string | null;
@@ -76,8 +82,11 @@ export interface DeliveryAttempt {
   result: "DELIVERED" | "FAILED";
   note: string | null;
   pod_image_url: string | null;
+  lat: number | null;
+  lng: number | null;
   attempted_at: string;
   created_at: string;
+  rider?: Pick<Rider, "id" | "name"> | null;
 }
 
 /* Pagination envelope from Laravel */

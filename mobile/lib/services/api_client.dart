@@ -20,6 +20,8 @@ class ApiClient {
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        // Required for ngrok free tier — bypasses the browser warning page
+        'ngrok-skip-browser-warning': 'true',
       },
     ));
 

@@ -1,3 +1,5 @@
+import 'delivery_attempt.dart';
+
 class Parcel {
   final int id;
   final String barcode;
@@ -13,6 +15,8 @@ class Parcel {
   final int? assignedRiderId;
   final String? assignedAt;
   final String? createdAt;
+  final String? updatedAt;
+  final List<DeliveryAttempt> deliveryAttempts;
 
   const Parcel({
     required this.id,
@@ -29,6 +33,8 @@ class Parcel {
     this.assignedRiderId,
     this.assignedAt,
     this.createdAt,
+    this.updatedAt,
+    this.deliveryAttempts = const [],
   });
 
   factory Parcel.fromJson(Map<String, dynamic> json) => Parcel(
@@ -46,6 +52,13 @@ class Parcel {
         assignedRiderId: json['assigned_rider_id'] as int?,
         assignedAt: json['assigned_at'] as String?,
         createdAt: json['created_at'] as String?,
+        updatedAt: json['updated_at'] as String?,
+        deliveryAttempts: json['delivery_attempts'] != null
+            ? (json['delivery_attempts'] as List)
+                .map((e) =>
+                    DeliveryAttempt.fromJson(e as Map<String, dynamic>))
+                .toList()
+            : [],
       );
 
   Map<String, dynamic> toJson() => {
@@ -65,4 +78,12 @@ class Parcel {
 
   bool get hasGps => recipientLat != null && recipientLng != null;
   bool get isExpress => priority == 'EXPRESS';
+  bool get isDelivered => status == 'DELIVERED';
+  bool get isFailed => status == 'FAILED';
+  bool get isInTransit => status == 'IN_TRANSIT';
+  bool get isAssigned => status == 'ASSIGNED';
+
+  /// Check if this parcel has a POD image
+  bool get hasPod =>
+      deliveryAttempts.any((a) => a.podImageUrl != null && a.podImageUrl!.isNotEmpty);
 }

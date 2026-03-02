@@ -1,22 +1,25 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../config/theme.dart';
 import '../../models/parcel.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/map_service.dart';
+import '../../services/parcel_service.dart';
 
 /// Full-screen Google Map showing rider location, parcel markers,
 /// route polyline, and reverse-geocoded area name.
-class RouteMapPage extends StatefulWidget {
+class RouteMapPage extends ConsumerStatefulWidget {
   const RouteMapPage({super.key});
 
   @override
-  State<RouteMapPage> createState() => _RouteMapPageState();
+  ConsumerState<RouteMapPage> createState() => _RouteMapPageState();
 }
 
-class _RouteMapPageState extends State<RouteMapPage> {
+class _RouteMapPageState extends ConsumerState<RouteMapPage> {
   final Completer<GoogleMapController> _controllerCompleter = Completer();
   bool _dataReady = false;
   String? _errorMessage;
@@ -28,30 +31,51 @@ class _RouteMapPageState extends State<RouteMapPage> {
   Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
 
-  // Default fallback: center of Skudai/JB parcel area
-  static const _fallback = LatLng(1.5500, 103.6500);
-  LatLng _initialTarget = _fallback;
+  // Hub-based fallback (set from rider profile)
+  LatLng _hubFallback = const LatLng(2.2090, 102.2511); // Jasin default
+  LatLng _initialTarget = const LatLng(2.2090, 102.2511);
 
   @override
   void initState() {
     super.initState();
-    // Pre-compute the parcel centroid so the initial camera is in the right area
-    final parcels = MapService.getDummyParcels();
-    _initialTarget = MapService.parcelCentroid(parcels);
-    _loadData();
+    // Read rider's hub location from auth state for initial camera
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authState = ref.read(authProvider);
+      final rider = authState.rider;
+      if (rider != null && rider.hasHubLocation) {
+        _hubFallback = LatLng(rider.hubLat!, rider.hubLng!);
+        _initialTarget = _hubFallback;
+      }
+      _loadData();
+    });
   }
 
-  /// Loads rider position, builds markers/polylines, then animates camera.
+  /// Loads rider position, fetches real parcels from API, builds markers/polylines.
   Future<void> _loadData() async {
     try {
-      // 1. Get rider location
+      // 1. Get rider GPS location (falls back to hub location)
       final pos = await MapService.getCurrentPosition();
       final riderLatLng = pos != null
           ? LatLng(pos.latitude, pos.longitude)
-          : _fallback;
+          : _hubFallback;
 
-      // 2. Load dummy parcels
-      final parcels = MapService.getDummyParcels();
+      // 2. Fetch real parcels from backend (zone-scoped)
+      final parcelService = ParcelService();
+      List<Parcel> parcels;
+      try {
+        parcels = await parcelService.getParcels(status: 'ASSIGNED');
+      } catch (_) {
+        // Also include IN_TRANSIT if available
+        parcels = [];
+      }
+
+      // Also fetch in-transit parcels
+      try {
+        final inTransit = await parcelService.getParcels(status: 'IN_TRANSIT');
+        parcels = [...parcels, ...inTransit];
+      } catch (_) {
+        // Ignore — we already have assigned
+      }
 
       // 3. Build markers
       final parcelMarkers = MapService.buildParcelMarkers(
@@ -72,7 +96,7 @@ class _RouteMapPageState extends State<RouteMapPage> {
         _riderPosition = riderLatLng;
         _parcels = parcels;
         _markers = {riderMarker, ...parcelMarkers};
-        _polylines = {polyline};
+        _polylines = parcels.isNotEmpty ? {polyline} : {};
         _areaName = area;
         _dataReady = true;
       });
@@ -89,7 +113,7 @@ class _RouteMapPageState extends State<RouteMapPage> {
 
   /// Waits for both [_controllerCompleter] and data, then animates the camera.
   Future<void> _fitBoundsWhenReady() async {
-    if (_riderPosition == null || _parcels.isEmpty) return;
+    if (_riderPosition == null) return;
 
     final controller = await _controllerCompleter.future;
 
@@ -97,22 +121,36 @@ class _RouteMapPageState extends State<RouteMapPage> {
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
 
-    final bounds = MapService.computeBounds(_riderPosition!, _parcels);
-    await controller.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 64),
-    );
+    if (_parcels.isEmpty) {
+      // No parcels — zoom to rider/hub area
+      await controller.animateCamera(
+        CameraUpdate.newLatLngZoom(_riderPosition!, 14),
+      );
+    } else {
+      final bounds = MapService.computeBounds(_riderPosition!, _parcels);
+      await controller.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 64),
+      );
+    }
   }
 
   /// Zooms to fit all markers (rider + parcels).
   Future<void> _fitBounds() async {
-    if (_riderPosition == null || _parcels.isEmpty) return;
+    if (_riderPosition == null) return;
     if (!_controllerCompleter.isCompleted) return;
 
     final controller = await _controllerCompleter.future;
-    final bounds = MapService.computeBounds(_riderPosition!, _parcels);
-    await controller.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 64),
-    );
+
+    if (_parcels.isEmpty) {
+      await controller.animateCamera(
+        CameraUpdate.newLatLngZoom(_riderPosition!, 14),
+      );
+    } else {
+      final bounds = MapService.computeBounds(_riderPosition!, _parcels);
+      await controller.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 64),
+      );
+    }
   }
 
   void _onParcelTapped(Parcel parcel) {

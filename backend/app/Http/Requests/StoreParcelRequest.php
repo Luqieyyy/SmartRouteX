@@ -11,14 +11,18 @@ class StoreParcelRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'barcode' => ['required','string','max:100','unique:parcels,barcode'],
-            'tracking_no' => ['nullable','string','max:100'],
-            'recipient_name' => ['nullable','string','max:255'],
-            'recipient_phone' => ['nullable','string','max:30'],
-            'raw_address' => ['nullable','string'],
-            'zone' => ['nullable','string','max:100'],
-            'priority' => ['nullable','in:NORMAL,EXPRESS'],
-            'status' => ['nullable','in:CREATED,ASSIGNED,IN_TRANSIT,DELIVERED,FAILED'],
+            'barcode'          => ['required','string','max:100','unique:parcels,barcode'],
+            'tracking_no'      => ['nullable','string','max:100'],
+            'recipient_name'   => ['nullable','string','max:255'],
+            'recipient_phone'  => ['nullable','string','max:30'],
+            'raw_address'      => ['nullable','string'],
+            'zone'             => ['nullable','string','max:100'],
+            'zone_id'          => ['nullable','integer','exists:zones,id'],
+            'hub_id'           => ['nullable','integer','exists:hubs,id'],
+            'priority'         => ['nullable','in:NORMAL,EXPRESS'],
+            'status'           => ['nullable','in:CREATED,ASSIGNED,IN_TRANSIT,DELIVERED,FAILED'],
+            'recipient_lat'    => ['nullable','numeric'],
+            'recipient_lng'    => ['nullable','numeric'],
         ];
     }
 }

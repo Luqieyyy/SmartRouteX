@@ -17,7 +17,8 @@ import {
   resendSetupEmail,
 } from "@/services/riders";
 import { getActiveZones } from "@/services/zones";
-import type { Rider, RiderStatus, PaginatedResponse, Zone } from "@/types";
+import { getActiveHubs } from "@/services/hubs";
+import type { Rider, RiderStatus, PaginatedResponse, Zone, Hub } from "@/types";
 import { useHubContext } from "@/lib/hub-context";
 import { Plus, Pencil, Trash2, Mail, RefreshCw } from "lucide-react";
 
@@ -94,10 +95,14 @@ export default function RidersPage() {
 
   /* ── Zone options (from hub context) ─────────────────────── */
   const [zoneOptions, setZoneOptions] = useState<Zone[]>([]);
+  const [hubOptions, setHubOptions] = useState<Hub[]>([]);
 
   useEffect(() => {
     getActiveZones()
       .then(setZoneOptions)
+      .catch(() => {});
+    getActiveHubs()
+      .then(setHubOptions)
       .catch(() => {});
   }, [refreshKey]);
 
@@ -517,11 +522,10 @@ export default function RidersPage() {
               onChange={(e) => updateField("warehouse", e.target.value)}
               options={[
                 { value: "", label: "Select warehouse" },
-                { value: "Warehouse A - KL", label: "Warehouse A – KL" },
-                { value: "Warehouse B - PJ", label: "Warehouse B – PJ" },
-                { value: "Warehouse C - Melaka", label: "Warehouse C – Melaka" },
-                { value: "Warehouse D - JB", label: "Warehouse D – JB" },
-                { value: "Warehouse E - Penang", label: "Warehouse E – Penang" },
+                ...hubOptions.map((h) => ({
+                  value: `${h.name}${h.state ? ` — ${h.state}` : ""}`,
+                  label: `${h.name}${h.state ? ` — ${h.state}` : ""}`,
+                })),
               ]}
             />
           </div>

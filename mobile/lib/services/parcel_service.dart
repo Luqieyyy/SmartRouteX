@@ -93,7 +93,7 @@ class ParcelService {
     return Parcel.fromJson(data['parcel'] as Map<String, dynamic>);
   }
 
-  /// POST /rider/parcels/{id}/pod
+  /// POST /rider/parcels/{id}/pod — Proof of Delivery upload
   Future<DeliveryAttempt> uploadPod({
     required int parcelId,
     required File image,
@@ -135,5 +135,24 @@ class ParcelService {
     });
     final data = res.data as Map<String, dynamic>;
     return DeliveryAttempt.fromJson(data['attempt'] as Map<String, dynamic>);
+  }
+
+  /// POST /rider/location — Manual GPS location update
+  Future<void> updateLocation({
+    required double lat,
+    required double lng,
+    double? accuracy,
+  }) async {
+    await _dio.post('/rider/location', data: {
+      'lat': lat,
+      'lng': lng,
+      if (accuracy != null) 'accuracy': accuracy,
+      'recorded_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// POST /rider/parcels/scan with DELIVERY type — Mark parcel as delivered
+  Future<Parcel> markDelivered(String barcode) async {
+    return scanParcel(barcode, 'DELIVERY');
   }
 }

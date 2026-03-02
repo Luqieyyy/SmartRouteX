@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\RiderAppController;
 use App\Http\Controllers\Api\RiderAuthController;
 use App\Http\Controllers\Api\RiderController;
 use App\Http\Controllers\Api\RouteOptimizationController;
+use App\Http\Controllers\Api\TrackingController;
 use App\Http\Controllers\Api\ZoneController;
 use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\EnsureRider;
@@ -122,6 +123,12 @@ Route::prefix('admin')
         Route::get('/{parcel}',    [ParcelController::class, 'show']);
         Route::put('/{parcel}',    [ParcelController::class, 'update']);
         Route::delete('/{parcel}', [ParcelController::class, 'destroy']);
+    });
+
+    // Live Tracking
+    Route::prefix('tracking')->group(function () {
+        Route::get('/riders',  [TrackingController::class, 'riders']);
+        Route::get('/parcels', [TrackingController::class, 'parcels']);
     });
 
     // Riders (enterprise management with activation emails)

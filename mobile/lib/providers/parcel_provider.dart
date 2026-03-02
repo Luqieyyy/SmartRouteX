@@ -95,6 +95,25 @@ class ParcelsNotifier extends StateNotifier<ParcelsState> {
     await load();
   }
 
+  /// Mark parcel as delivered via scan
+  Future<void> markDelivered(String barcode) async {
+    await _service.markDelivered(barcode);
+    await load();
+  }
+
+  /// Manual GPS location update
+  Future<void> updateLocation({
+    required double lat,
+    required double lng,
+    double? accuracy,
+  }) async {
+    await _service.updateLocation(
+      lat: lat,
+      lng: lng,
+      accuracy: accuracy,
+    );
+  }
+
   void setTab(String tab) {
     load(status: tab);
   }

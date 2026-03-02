@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import { getActiveZones } from "@/services/zones";
+import { getRiders } from "@/services/riders";
+import type { Zone, Rider } from "@/types";
 import DataTable, { Column } from "@/components/ui/DataTable";
 import Pagination from "@/components/ui/Pagination";
 import FilterBar from "@/components/ui/FilterBar";
@@ -9,9 +12,10 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
-import { formatDate, statusColor, priorityColor } from "@/lib/utils";
+import { formatDate, formatDateTime, statusColor, priorityColor } from "@/lib/utils";
 import {
   getParcels,
+  getParcel,
   createParcel,
   updateParcel,
   deleteParcel,
@@ -37,14 +41,7 @@ const PRIORITY_OPTIONS = [
   { value: "EXPRESS", label: "Express" },
 ];
 
-const ZONE_FILTER_OPTIONS = [
-  { value: "", label: "All Zones" },
-  { value: "Zone A", label: "Zone A" },
-  { value: "Zone B", label: "Zone B" },
-  { value: "Zone C", label: "Zone C" },
-  { value: "Zone D", label: "Zone D" },
-  { value: "Zone E", label: "Zone E" },
-];
+// Zones are loaded dynamically from API — see useEffect below
 
 type ModalMode = null | "view" | "create" | "edit" | "import";
 
@@ -55,6 +52,8 @@ interface FormData {
   recipient_phone: string;
   raw_address: string;
   zone: string;
+  zone_id: string;
+  assigned_rider_id: string;
   priority: string;
   status: string;
 }
@@ -66,12 +65,30 @@ const emptyForm: FormData = {
   recipient_phone: "",
   raw_address: "",
   zone: "",
+  zone_id: "",
+  assigned_rider_id: "",
   priority: "NORMAL",
   status: "CREATED",
 };
 
 export default function ParcelsPage() {
-  const { refreshKey } = useHubContext();
+  const { refreshKey, activeHubId } = useHubContext();
+
+  // ── Dynamic zone list (reloads when hub changes) ──
+  const [zones, setZones] = useState<Zone[]>([]);
+  useEffect(() => {
+    getActiveZones(activeHubId ?? undefined)
+      .then(setZones)
+      .catch(() => setZones([]));
+  }, [activeHubId, refreshKey]);
+
+  // ── Active riders for assignment (reloads when hub changes) ──
+  const [activeRiders, setActiveRiders] = useState<Rider[]>([]);
+  useEffect(() => {
+    getRiders({ status: 'ACTIVE' as any, per_page: 100 } as any)
+      .then((res) => setActiveRiders(res.data))
+      .catch(() => setActiveRiders([]));
+  }, [activeHubId, refreshKey]);
   const [data, setData] = useState<PaginatedResponse<Parcel> | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -102,7 +119,7 @@ export default function ParcelsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, statusFilter, zoneFilter, refreshKey]);
+  }, [page, search, statusFilter, zoneFilter, refreshKey, activeHubId]);
 
   useEffect(() => {
     fetchParcels();
@@ -129,6 +146,8 @@ export default function ParcelsPage() {
       recipient_phone: parcel.recipient_phone ?? "",
       raw_address: parcel.raw_address ?? "",
       zone: parcel.zone ?? "",
+      zone_id: parcel.zone_id ? String(parcel.zone_id) : "",
+      assigned_rider_id: parcel.assigned_rider_id ? String(parcel.assigned_rider_id) : "",
       priority: parcel.priority,
       status: parcel.status,
     });
@@ -136,9 +155,15 @@ export default function ParcelsPage() {
     setModalMode("edit");
   }
 
-  function openView(parcel: Parcel) {
+  async function openView(parcel: Parcel) {
     setSelected(parcel);
     setModalMode("view");
+    try {
+      const full = await getParcel(parcel.id);
+      setSelected(full);
+    } catch {
+      /* use existing data if fetch fails */
+    }
   }
 
   function openImport() {
@@ -162,10 +187,23 @@ export default function ParcelsPage() {
     }
     setSaving(true);
     try {
+      const payload: Partial<Parcel> = {
+        barcode: form.barcode,
+        tracking_no: form.tracking_no || null,
+        recipient_name: form.recipient_name || null,
+        recipient_phone: form.recipient_phone || null,
+        raw_address: form.raw_address || null,
+        zone: form.zone || null,
+        zone_id: form.zone_id ? parseInt(form.zone_id) : null,
+        assigned_rider_id: form.assigned_rider_id ? parseInt(form.assigned_rider_id) : null,
+        priority: form.priority as any,
+        status: form.status as any,
+      };
+
       if (modalMode === "create") {
-        await createParcel(form as unknown as Partial<Parcel>);
+        await createParcel(payload);
       } else if (modalMode === "edit" && selected) {
-        await updateParcel(selected.id, form as unknown as Partial<Parcel>);
+        await updateParcel(selected.id, payload);
       }
       closeModal();
       fetchParcels();
@@ -262,7 +300,12 @@ export default function ParcelsPage() {
         searchPlaceholder="Search barcode, tracking no, recipient..."
         filters={[
           { label: "Status", value: statusFilter, onChange: setStatusFilter, options: STATUS_OPTIONS },
-          { label: "Zone", value: zoneFilter, onChange: setZoneFilter, options: ZONE_FILTER_OPTIONS },
+          {
+            label: "Zone", value: zoneFilter, onChange: setZoneFilter, options: [
+              { value: "", label: "All Zones" },
+              ...zones.map((z) => ({ value: z.code, label: `${z.name} (${z.code})` })),
+            ]
+          },
         ]}
         actions={
           <>
@@ -288,29 +331,114 @@ export default function ParcelsPage() {
         />
       )}
 
-      {/* ── View Modal ── */}
+      {/* ── View Modal (with POD & Delivery History) ── */}
       <Modal open={modalMode === "view"} onClose={closeModal} title="Parcel Details" wide>
         {selected && (
-          <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-            {([
-              ["Barcode", selected.barcode],
-              ["Tracking No", selected.tracking_no],
-              ["Recipient", selected.recipient_name],
-              ["Phone", selected.recipient_phone],
-              ["Address", selected.raw_address],
-              ["Zone", selected.zone],
-              ["Priority", selected.priority],
-              ["Status", selected.status],
-              ["Assigned Rider", selected.rider?.name ?? (selected.assigned_rider_id ? `#${selected.assigned_rider_id}` : "-")],
-              ["Assigned At", selected.assigned_at ? formatDate(selected.assigned_at) : "-"],
-              ["Created", formatDate(selected.created_at)],
-              ["Updated", formatDate(selected.updated_at)],
-            ] as [string, string | null][]).map(([label, val]) => (
-              <div key={label}>
-                <dt className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</dt>
-                <dd className="mt-0.5 text-gray-900">{val ?? "-"}</dd>
+          <div className="space-y-6">
+            {/* Basic Info Grid */}
+            <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              {([
+                ["Barcode", selected.barcode],
+                ["Tracking No", selected.tracking_no],
+                ["Recipient", selected.recipient_name],
+                ["Phone", selected.recipient_phone],
+                ["Address", selected.raw_address],
+                ["Zone", selected.zone],
+                ["Priority", selected.priority],
+                ["Status", selected.status],
+                ["Assigned Rider", selected.rider?.name ?? (selected.assigned_rider_id ? `#${selected.assigned_rider_id}` : "-")],
+                ["Assigned At", selected.assigned_at ? formatDateTime(selected.assigned_at) : "-"],
+                ["Created", formatDate(selected.created_at)],
+                ["Updated", formatDate(selected.updated_at)],
+              ] as [string, string | null][]).map(([label, val]) => (
+                <div key={label}>
+                  <dt className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</dt>
+                  <dd className="mt-0.5 text-gray-900">{val ?? "-"}</dd>
+                </div>
+              ))}
+            </div>
+
+            {/* Delivery Attempts / POD Section */}
+            {selected.delivery_attempts && selected.delivery_attempts.length > 0 && (
+              <div className="border-t border-gray-100 pt-4">
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  Delivery History & Proof of Delivery
+                </h3>
+                <div className="space-y-3">
+                  {selected.delivery_attempts.map((attempt) => (
+                    <div
+                      key={attempt.id}
+                      className={`border rounded-lg p-4 ${attempt.result === "DELIVERED"
+                        ? "border-green-200 bg-green-50/50"
+                        : "border-red-200 bg-red-50/50"
+                        }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge className={attempt.result === "DELIVERED" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}>
+                            {attempt.result}
+                          </Badge>
+                          <span className="text-xs text-gray-500">
+                            {formatDateTime(attempt.attempted_at)}
+                          </span>
+                        </div>
+                        {attempt.rider && (
+                          <span className="text-xs text-gray-600 font-medium">
+                            by {attempt.rider.name}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Notes */}
+                      {attempt.note && (
+                        <p className="text-sm text-gray-700 mb-2">
+                          <span className="font-medium text-gray-500">Note: </span>
+                          {attempt.note}
+                        </p>
+                      )}
+
+                      {/* GPS Coordinates */}
+                      {(attempt.lat && attempt.lng) && (
+                        <p className="text-xs text-gray-500 mb-2">
+                          📍 GPS: {attempt.lat.toFixed(6)}, {attempt.lng.toFixed(6)}
+                        </p>
+                      )}
+
+                      {/* POD Image */}
+                      {attempt.pod_image_url && (
+                        <div className="mt-3">
+                          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                            Proof of Delivery Photo
+                          </p>
+                          <a
+                            href={attempt.pod_image_url.startsWith("http") ? attempt.pod_image_url : `${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "")}${attempt.pod_image_url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block"
+                          >
+                            <img
+                              src={attempt.pod_image_url.startsWith("http") ? attempt.pod_image_url : `${process.env.NEXT_PUBLIC_API_URL?.replace("/api", "")}${attempt.pod_image_url}`}
+                              alt="Proof of Delivery"
+                              className="rounded-lg border border-gray-200 max-h-64 object-cover hover:opacity-90 transition-opacity cursor-zoom-in"
+                            />
+                          </a>
+                          <p className="text-xs text-gray-400 mt-1">Click to open full size</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
+
+            {/* No attempts message */}
+            {(!selected.delivery_attempts || selected.delivery_attempts.length === 0) && (
+              <div className="border-t border-gray-100 pt-4">
+                <p className="text-sm text-gray-400 text-center py-4">
+                  No delivery attempts recorded yet.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </Modal>
@@ -330,7 +458,20 @@ export default function ParcelsPage() {
           <div className="col-span-2">
             <Input label="Raw Address" value={form.raw_address} onChange={(e) => updateForm("raw_address", e.target.value)} error={errors.raw_address} />
           </div>
-          <Input label="Zone" value={form.zone} onChange={(e) => updateForm("zone", e.target.value)} error={errors.zone} />
+          <Select
+            label="Zone"
+            value={form.zone_id}
+            onChange={(e) => {
+              const selected = zones.find((z) => String(z.id) === e.target.value);
+              updateForm("zone_id", e.target.value);
+              updateForm("zone", selected?.name ?? "");
+            }}
+            options={[
+              { value: "", label: zones.length ? "Select Zone" : "No zones — select a hub first" },
+              ...zones.map((z) => ({ value: String(z.id), label: `${z.name} (${z.code})` })),
+            ]}
+            error={errors.zone}
+          />
           <Select
             label="Priority"
             value={form.priority}
@@ -345,6 +486,20 @@ export default function ParcelsPage() {
               onChange={(e) => updateForm("status", e.target.value)}
               options={STATUS_OPTIONS.filter((o) => o.value !== "")}
               error={errors.status}
+            />
+          )}
+          {modalMode === "edit" && (
+            <Select
+              label="Assign Rider"
+              value={form.assigned_rider_id ?? ""}
+              onChange={(e) => updateForm("assigned_rider_id" as any, e.target.value)}
+              options={[
+                { value: "", label: "Unassigned" },
+                ...activeRiders.map((r) => ({
+                  value: String(r.id),
+                  label: `${r.name}${r.zone ? ` (${r.zone})` : ""}${r.shift_active ? " 🟢" : ""}`,
+                })),
+              ]}
             />
           )}
         </div>

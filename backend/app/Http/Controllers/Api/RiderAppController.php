@@ -18,7 +18,20 @@ class RiderAppController extends Controller
 
     private function rider(Request $request): Rider
     {
-        return $request->user()->rider;
+        $user = $request->user();
+
+        // Rider login via RiderAuthController creates Sanctum tokens owned
+        // by the Rider model directly.  So $request->user() already IS a Rider.
+        if ($user instanceof Rider) {
+            return $user;
+        }
+
+        // Fallback: admin-created account where token is on User model
+        if ($user && method_exists($user, 'rider') && $user->rider) {
+            return $user->rider;
+        }
+
+        abort(403, 'Rider profile not found.');
     }
 
     // ─── profile ──────────────────────────────────────────────
@@ -29,7 +42,7 @@ class RiderAppController extends Controller
     public function profile(Request $request): JsonResponse
     {
         $rider = $this->rider($request);
-        $rider->load('latestLocation');
+        $rider->load(['latestLocation', 'hub:id,name,latitude,longitude']);
 
         $today = now()->startOfDay();
 
@@ -110,7 +123,7 @@ class RiderAppController extends Controller
         $q      = $request->query('q');
 
         $parcels = Parcel::where('assigned_rider_id', $rider->id)
-            ->when($rider->zone_id, fn ($query, $zoneId) => $query->where('zone_id', $zoneId))
+            ->with(['deliveryAttempts' => fn ($q) => $q->with('rider:id,name')->orderByDesc('attempted_at')])
             ->when($status, fn ($query) => $query->where('status', $status))
             ->when($q, fn ($query) => $query->where(function ($sub) use ($q) {
                 $sub->where('barcode', 'ilike', "%{$q}%")

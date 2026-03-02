@@ -154,6 +154,8 @@ class RiderAuthController extends Controller
 
         RiderAuditLog::log($rider, RiderAuditLog::ACTION_LOGIN_SUCCESS, null, $request->ip());
 
+        $rider->load('hub:id,name,latitude,longitude');
+
         return response()->json([
             'ok'           => true,
             'access_token' => $token,
@@ -165,6 +167,10 @@ class RiderAuthController extends Controller
                 'phone'      => $rider->phone,
                 'zone'       => $rider->zone,
                 'status'     => $rider->status,
+                'hub_id'     => $rider->hub_id,
+                'hub_name'   => $rider->hub?->name,
+                'hub_lat'    => $rider->hub?->latitude,
+                'hub_lng'    => $rider->hub?->longitude,
             ],
         ]);
     }
@@ -198,7 +204,7 @@ class RiderAuthController extends Controller
             return response()->json(['message' => 'Rider profile not found.'], 404);
         }
 
-        $rider->load('latestLocation');
+        $rider->load(['latestLocation', 'hub:id,name,latitude,longitude']);
 
         return response()->json([
             'id'         => $rider->id,
@@ -208,6 +214,10 @@ class RiderAuthController extends Controller
             'zone'       => $rider->zone,
             'status'     => $rider->status,
             'is_active'  => $rider->is_active,
+            'hub_id'     => $rider->hub_id,
+            'hub_name'   => $rider->hub?->name,
+            'hub_lat'    => $rider->hub?->latitude,
+            'hub_lng'    => $rider->hub?->longitude,
             'last_login_at'      => $rider->last_login_at?->toIso8601String(),
             'email_verified_at'  => $rider->email_verified_at?->toIso8601String(),
             'latest_location'    => $rider->latestLocation,

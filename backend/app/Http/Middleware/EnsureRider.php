@@ -15,12 +15,22 @@ class EnsureRider
     {
         $user = $request->user();
 
-        if (! $user || ! $user->isRider() || ! $user->rider) {
-            return response()->json([
-                'message' => 'Rider profile not found.',
-            ], 403);
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
-        return $next($request);
+        // Rider login creates Sanctum tokens owned by Rider model directly
+        if ($user instanceof \App\Models\Rider) {
+            return $next($request);
+        }
+
+        // Fallback: User model with rider relationship
+        if ($user->isRider() && $user->rider) {
+            return $next($request);
+        }
+
+        return response()->json([
+            'message' => 'Rider profile not found.',
+        ], 403);
     }
 }

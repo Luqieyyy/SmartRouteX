@@ -1,0 +1,10 @@
+version: "3"
+agent:
+  authtoken: 3AP4XvlTSqT9j3D9txXUc8SkEQ2_4YdweNF9aHscxqa5A1Kx8
+
+tunnels:
+  smartroutex-backend:
+    proto: http
+    addr: 8000
+    # Optional: uncomment for fixed domain (paid plan)
+    # domain: your-fixed-domain.ngrok-free.app

@@ -42,10 +42,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
 
       final data = await _authService.me();
-      final user = User.fromJson(data);
-      final rider = data['rider'] != null
-          ? Rider.fromJson(data['rider'] as Map<String, dynamic>)
-          : null;
+      
+      // me() endpoint returns rider data directly (not nested)
+      final rider = Rider.fromJson(data);
+      
+      // Create User object from rider data
+      final user = User(
+        id: data['id'] as int,
+        name: data['name'] as String,
+        email: data['work_email'] as String,
+        role: 'rider',
+      );
+      
       state = AuthState(user: user, rider: rider);
     } catch (_) {
       await ApiClient().clearToken();
@@ -59,9 +67,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final result = await _authService.login(email, password);
       state = AuthState(user: result.user, rider: result.rider);
     } catch (e) {
-      String msg = 'Login failed. Check credentials.';
-      if (e is Exception) {
-        msg = e.toString().replaceAll('Exception: ', '');
+      String msg = e.toString();
+      // Remove 'Exception: ' prefix if present
+      if (msg.startsWith('Exception: ')) {
+        msg = msg.substring('Exception: '.length);
       }
       state = state.copyWith(loading: false, error: msg);
     }
